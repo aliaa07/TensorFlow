@@ -1,7 +1,11 @@
 import time
-from urllib.error import URLError
 import mplfinance
+import numpy as np
 import pandas as pd
+import pandas.core.frame
+import pandas.core.series
+from urllib.error import URLError
+from scipy.signal import argrelextrema
 from datetime import datetime, timedelta
 
 
@@ -16,8 +20,6 @@ class SymbolData:
         or to be analyzed utilizing yor ML algorithm
         """
         self.ticker = symbol
-        if symbol not in SymbolData.list_of_symbols():
-            raise ValueError("What? I can't find that symbol, must be a shit coin isn't it?")
         today = datetime.now()
         current_time = timedelta(hours=today.hour, minutes=today.minute, seconds=(today.second + 1), microseconds=today.microsecond)
         yesterday = today - current_time
@@ -33,7 +35,9 @@ class SymbolData:
             if from_candle > 0:
                 SymbolData.ohlc = SymbolData.ohlc.iloc[df.count(0)["Open"] - from_candle:]
         except URLError:
-            raise ConnectionError("Check your internet connection or use vpn(normally not necessary)")
+            raise ConnectionError("Check name of your pair (it is mostly all in uppercase)"
+                                  "if no there was no problem there then"
+                                  "check your internet connection or use vpn (normally not necessary)")
 
     def candle_chart(self, mav=tuple(), volume=False) -> None:
         """
@@ -50,8 +54,16 @@ class SymbolData:
         mplfinance.plot(plot_reqs, type="candle", **k)
 
     @staticmethod
-    def list_of_symbols():
-        """Returns a list of crypto assets available"""
+    def list_of_symbols() -> list:
+        """
+        This func returns a list of crypto assets available,
+        the list you get is a sample of the assets available for more symbols
+        checkout 'https://finance.yahoo.com' and you have a lot more symbols of
+        forex pairs , stocks, crypto assets , indexes and so on
+
+        ** note: forex pairs are like: 'EURUSD=X' (i have no idea why they have =X ask
+        yahoo finance developers:) )
+        """
         symbols_list = [
             'BTC-USD', 'ETH-USD', 'USDT-USD', 'BNB-USD', 'USDC-USD', 'ADA-USD', 'HEX-USD', 'XRP-USD', 'DOGE-USD', 'AVAX-USD', 'MATIC-USD',
             'SHIB-USD', 'CRO-USD', 'LTC-USD', 'LINK-USD', 'TRX-USD', 'ALGO-USD', 'BCH-USD', 'FTM-USD', 'XLM-USD', 'MANA-USD', 'HBAR-USD',
@@ -85,6 +97,56 @@ class SymbolData:
             'USNBT-USD', 'XBY-USD', 'ERK-USD', 'ATB-USD', 'FRST-USD', 'BPC-USD', 'LKK-USD', 'BONO-USD', 'ECC-USD', 'UNO-USD', 'CSC-USD',
             'MOAC-USD', 'ECA-USD', 'CLAM-USD', 'BDX-USD', 'FLASH-USD', 'ALIAS-USD', 'DACC-USD', 'SPHR-USD', 'RBY-USD', 'HNC-USD', 'MINT-USD',
             'AIB-USD', 'XUC-USD', 'CTC-USD', 'DUN-USD', 'CCA-USD', 'JDC-USD', 'DCY-USD', 'SLS-USD', 'MIDAS-USD', 'LRG-USD', 'GRN-USD', 'VBK-USD',
-            'BONFIRE-USD', 'BST-USD']
+            'BONFIRE-USD', 'BST-USD', 'TVK-USD', 'GBPUSD=X', 'EURUSD=X', 'USDCHF=X']
         return symbols_list
 
+
+def bull_bear(candle: pandas.core.series.Series) -> int:
+    Close = candle["Close"]
+    Open = candle["Open"]
+    if Close > Open:
+        return 1
+    if Close < Open:
+        return -1
+    if Close == Open:
+        return 0
+
+
+def starting_point_finder(dataframe: pandas.core.frame.DataFrame) -> pandas.core.frame.DataFrame:
+    highest_high = dataframe.loc[dataframe["High"] == dataframe.max()["High"]]
+    lowest_low = dataframe.loc[dataframe["Low"] == dataframe.min()["Low"]]
+    if highest_high.index[0].date() > lowest_low.index[0].date():
+        return highest_high
+    elif highest_high.index[0].date() < lowest_low.index[0].date():
+        return lowest_low
+    else:
+        print("Something went wrong")
+        return pd.DataFrame()
+
+
+def ATR(candle: pandas.core.series.Series, dataframe: pandas.core.frame.DataFrame, __n__=30) -> float:
+    if __n__ == 0:
+        return 0
+    else:
+        high = candle["High"]
+        low = candle["Low"]
+        Cp = dataframe.iloc[(1 if (candle_index := dataframe.index.get_loc(candle.name)) == 0 else candle_index) - 1]["Close"]
+        local_tr = max(abs(high - low), abs(high - Cp), abs(low - Cp)) / 30
+        return local_tr + ATR(dataframe.iloc[candle_index - 1], dataframe, __n__ - 1)
+
+
+def Pivot(dataframe: pandas.core.frame.DataFrame, Order=3, **kwargs) -> pandas.core.frame.DataFrame:
+    local_highs = argrelextrema(dataframe.High.values, np.greater_equal, order=Order)[0]  # order=3
+    local_lows = argrelextrema(dataframe.Low.values, np.less_equal, order=Order)[0]
+    dataframe["HighPivots"] = [True if i in dataframe.iloc[local_highs].index else False for i in dataframe.index]
+    dataframe["LowPivots"] = [True if i in dataframe.iloc[local_lows].index else False for i in dataframe.index]
+    if kwargs.get("draw_on_chart") is True:
+        dataframe.High.plot()
+        dataframe.Low.plot()
+        dataframe.iloc[local_highs].High.plot(style="^", lw=10, color="green")
+        dataframe.iloc[local_lows].Low.plot(style="v", lw=10, color="red")
+    return dataframe
+
+
+eur = SymbolData("EURUSD=X", 500, 3)
+Pivot(eur.ohlc, Order=10, draw_on_chart=True)
