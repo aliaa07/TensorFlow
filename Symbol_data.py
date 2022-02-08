@@ -1,3 +1,4 @@
+"""Crate your own dreams by yore own hands grate man"""
 import time
 import mplfinance
 import numpy as np
@@ -5,20 +6,22 @@ import pandas as pd
 import pandas.core.frame
 import pandas.core.series
 from urllib.error import URLError
+from matplotlib import pyplot as plt
 from scipy.signal import argrelextrema
 from datetime import datetime, timedelta
 
 
 class SymbolData:
+    """
+import matplotlib.pyplot as plt
+    This class initialization ends up with returning
+    a dataframe and using self.ohlc you can get to a
+    pandas dataframe ready to be plotted on a chart
+    or to be analyzed utilizing yor ML algorithm
+    """
     ohlc = None
 
     def __init__(self, symbol: str, from_candle=0, number_of_years=3) -> None:
-        """
-        This class initialization ends up with returning
-        a dataframe and using self.ohlc you can get to a
-        pandas dataframe ready to be plotted on a chart
-        or to be analyzed utilizing yor ML algorithm
-        """
         self.ticker = symbol
         today = datetime.now()
         current_time = timedelta(hours=today.hour, minutes=today.minute, seconds=(today.second + 1), microseconds=today.microsecond)
@@ -41,9 +44,9 @@ class SymbolData:
 
     def candle_chart(self, mav=tuple(), volume=False) -> None:
         """
-        plot your dataframe on a candle stick chart you can also plot
-        moving averages(using mav=(5, 10, ... up to 7 mavs)) or show
-        volume(using volume=Ture) on chart
+        plot your dataframe on a candle stick chart
+        :param mav: set mav=(5, 10, ... up to 7 mavs) and see moving averages on chart
+        :param volume: set volume(volume=Ture) to plot it on chart
         """
         plot_reqs = self.ohlc
         k = dict()
@@ -63,6 +66,7 @@ class SymbolData:
 
         ** note: forex pairs are like: 'EURUSD=X' (i have no idea why they have =X ask
         yahoo finance developers:) )
+        :return: a list of available symbols
         """
         symbols_list = [
             'BTC-USD', 'ETH-USD', 'USDT-USD', 'BNB-USD', 'USDC-USD', 'ADA-USD', 'HEX-USD', 'XRP-USD', 'DOGE-USD', 'AVAX-USD', 'MATIC-USD',
@@ -102,6 +106,12 @@ class SymbolData:
 
 
 def bull_bear(candle: pandas.core.series.Series) -> int:
+    """
+    return a number from -1 to 1 which indicates that the given candle
+    is a bullish candle or a bearish one
+    :param candle: one candle from Sd.ohlc dataframe
+    :return: int
+    """
     Close = candle["Close"]
     Open = candle["Open"]
     if Close > Open:
@@ -113,6 +123,11 @@ def bull_bear(candle: pandas.core.series.Series) -> int:
 
 
 def starting_point_finder(dataframe: pandas.core.frame.DataFrame) -> pandas.core.frame.DataFrame:
+    """
+    finds the highest or lowest (the earliest one) within the given dataframe
+    :param dataframe: Sd.ohlc
+    :return: a candle if no error occurs
+    """
     highest_high = dataframe.loc[dataframe["High"] == dataframe.max()["High"]]
     lowest_low = dataframe.loc[dataframe["Low"] == dataframe.min()["Low"]]
     if highest_high.index[0].date() > lowest_low.index[0].date():
@@ -124,18 +139,34 @@ def starting_point_finder(dataframe: pandas.core.frame.DataFrame) -> pandas.core
         return pd.DataFrame()
 
 
-def ATR(candle: pandas.core.series.Series, dataframe: pandas.core.frame.DataFrame, __n__=30) -> float:
+def ATR(candle: pandas.core.series.Series, dataframe: pandas.core.frame.DataFrame, __n__=30, n=30) -> float:
+    """
+    calculates the ATR of the given candle in the given dataframe
+    :param candle: one candle from Sd.ohlc dataframe
+    :param dataframe: Sd.ohlc
+    :param __n__: should not be changed in no situation
+    :param n: if you wanted to change the period change this n and the other __n__ at
+    the same time so the func works as it was (but don't change them for god's sack)
+    :return: float
+    """
     if __n__ == 0:
         return 0
     else:
         high = candle["High"]
         low = candle["Low"]
         Cp = dataframe.iloc[(1 if (candle_index := dataframe.index.get_loc(candle.name)) == 0 else candle_index) - 1]["Close"]
-        local_tr = max(abs(high - low), abs(high - Cp), abs(low - Cp)) / 30
+        local_tr = max(abs(high - low), abs(high - Cp), abs(low - Cp)) / n
         return local_tr + ATR(dataframe.iloc[candle_index - 1], dataframe, __n__ - 1)
 
 
 def Pivot(dataframe: pandas.core.frame.DataFrame, Order=3, **kwargs) -> pandas.core.frame.DataFrame:
+    """
+    finds the high and low pivots within the dataframe
+    :param dataframe: a dataframe to search in
+    :param Order: defines the range of candles to check in order to find the local optimum
+    :param kwargs: set draw_on_chart on true to draw pivots on chart
+    :return: a new dataframe with 2 new columns for high and low pivots with true and false vals
+    """
     local_highs = argrelextrema(dataframe.High.values, np.greater_equal, order=Order)[0]  # order=3
     local_lows = argrelextrema(dataframe.Low.values, np.less_equal, order=Order)[0]
     dataframe["HighPivots"] = [True if i in dataframe.iloc[local_highs].index else False for i in dataframe.index]
@@ -145,6 +176,7 @@ def Pivot(dataframe: pandas.core.frame.DataFrame, Order=3, **kwargs) -> pandas.c
         dataframe.Low.plot()
         dataframe.iloc[local_highs].High.plot(style="^", lw=10, color="green")
         dataframe.iloc[local_lows].Low.plot(style="v", lw=10, color="red")
+        plt.show()
     return dataframe
 
 
