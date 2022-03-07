@@ -1,265 +1,183 @@
-import numpy as np
 from copy import deepcopy
+import numpy as np
 import matplotlib.pyplot as plt
+
+np.random.seed(7)
 
 
 class NeuralNetwork:
+    J = list()
     layers = list()
-    Matrix_A = dict()
     Matrix_Theta = dict()
     Matrix_delta = dict()
     Matrix_DELTA = dict()
-    j_of_on_round_through_exps = list()
-    Matrix_Theta_for_gradient_checking = dict()
-    Matrix_DELTA_for_gradient_checking = dict()
-    Matrix_A_for_gradient_checking = dict()
-    J = list()
-    D = dict
-    m = 0
-    k = 0
+    Matrix_Activation = dict()
+    m = k = features = 0
 
-    def __init__(self, X: np.ndarray = None, Y: np.ndarray = None, **kwargs) -> None:
-        self.Y = Y
+    def __init__(self, X=None, Y=None, dataset=None, epsilon=(10 ** -4)):
         self.X = X
-        if self.X.ndim == self.Y.ndim:
+        self.Y = Y
+        self.dataset = dataset
+        if self.X.ndim == self.Y.ndim and self.X.shape[0] == self.Y.shape[0]:
             if self.X.ndim == 1:
                 print("*** Note: we have increased the dims of X by one in axis=-1 ***\n")
                 self.X = np.expand_dims(self.X, axis=-1)
                 self.Y = np.expand_dims(self.Y, axis=-1)
         else:
-            raise TypeError("The input X and Y are of the same dim")
-        self.kwargs = kwargs
-        self.epsilon = _ if (_ := self.kwargs.get("epsilon")) is not None else 10 ** -5
-        self.lambda_ = _ if (_ := self.kwargs.get("lambda_")) is not None else 2
-        self.layers.insert(0, (self.X.ndim, self.X.shape))
-        self.layers.append((self.Y.ndim, self.Y.shape))
+            raise ValueError("The input X and Y are not of the same dimension\n"
+                             "or they are not of the same size each Yi must satisfy on Xi")
+        self.epsilon = epsilon
         self.m = self.X.shape[0]
+        self.features = self.X.shape[1]
         self.k = self.Y.shape[1]
+        self.layers.append(self.X.shape[1])  # input neurons (initializers)
+        self.layers.append(self.k)  # output neurons (classes)
 
-    def add_layer(self, neurons: int = 5) -> None:
-        """
-        initialize a layer to the NW with n number of neurons
-        :param neurons: neurons of the initialized layer
-        :return: None
-        """
-        self.layers.insert(-1, (1, (1, neurons)))
+    def add_layer(self, *args, list_of_layers=None):
+        if list_of_layers is not None:
+            args = list_of_layers
+        for layer in args:
+            self.layers.insert(-1, layer)
 
-    def Theta_matrix_creator(self) -> None:
-        """
-        creates the theta matrix
-        ** must be called just and only ONCE **
-        :return: None
-        """
-        for index, layer in enumerate(self.layers):
-            if index == 0:
-                continue
-            name = f"Theta_l{index}"
-            C = layer[1][1] + 1
-            P = self.layers[index - 1][1][1] + 1
-            self.Matrix_Theta.update({
-                name: (np.random.random([C, P]) * (self.epsilon * 2) - self.epsilon)
-            })
+    def Theta_init(self):
+        for index in range(1, len(self.layers)):
+            self.Matrix_Theta[f"T{index}"] = np.random.random([self.layers[index], self.layers[index - 1] + 1]) * (self.epsilon * 2) - self.epsilon
 
-    def DELTA_matrix_creator(self, Matrix_name: dict) -> None:
-        for index, layer in enumerate(self.layers):
-            if index == 0:
-                continue
-            name = f"DELTA_l{index}"
-            C = layer[1][1] + 1
-            P = self.layers[index - 1][1][1] + 1
-            Matrix_name.update({name: np.zeros([C, P])})
+    def Activation_init(self, Xi):
+        self.Matrix_Activation.clear()
+        for index in range(1, len(self.layers) + 1):
+            self.Matrix_Activation[f"A{index}"] = np.zeros([self.layers[index - 1], 1])
+            if index == 1:
+                self.Matrix_Activation[f"A{index}"] = np.expand_dims(Xi, axis=-1)
 
-    def Z(self, layer: int, matrix_t: np.array, matrix_a: np.array) -> np.array:
-        """
-        gets a layer from z2 to final layer and returns the matrix
-        of the calculated layer
-        :param matrix_a: Matrix of activation
-        :param matrix_t: Matrix of theta
-        :param layer: layer starting form 2 to the L
-        :return: matrix of calculated layer
-        """
-        return np.dot(matrix_t[f"Theta_l{layer - 1}"], matrix_a[f"A_l{layer - 1}"])
+    def error_screener(self, error, loss=None):
+        pass
 
-    @staticmethod
-    def logistic(z: np.ndarray):
-        """
-        :param z:
-        :return: returns the g(z) of the z array
-        """
-        return 1 / (1 + np.exp(-z))
-
-    def A1_matrix_creator(self, Xi: np.array, matrix_a: np.array) -> None:
-        """
-        creates the first layer of input for NW
-        it could be an array of floats
-        :param matrix_a: the activation matrix
-        :param Xi: the array to create first matrix with
-        :return: None
-        """
-        input_neurons = self.layers[0][1][1]
-        matrix_a.update({"A_l1": np.ones([input_neurons + 1, 1])})
-        for xi in range(1, input_neurons + 1):
-            matrix_a["A_l1"][xi] = Xi[xi - 1]
-
-    def forward_propagation(self, Xi: np.array, **kwargs) -> np.array:
-        """
-        you have to input first a1 layer manually
-        then running this means that for each layer an
-        activation matrix has been created
-        give it an X and returns the Y of it
-        :param Xi: must be and np. array
-        :return: it returns the result in form of an array
-        """
-        if kwargs.get("epsilon") is not None:
-            self.Matrix_A_for_gradient_checking.clear()
-            self.Matrix_Theta_for_gradient_checking.clear()
-            self.Matrix_Theta_for_gradient_checking = deepcopy(self.Matrix_Theta)
-            self.Matrix_Theta_for_gradient_checking[f"Theta_l{kwargs.get('l')}"][kwargs.get('i'), kwargs.get('j')] += kwargs.get("epsilon")
-            self.A1_matrix_creator(Xi, self.Matrix_A_for_gradient_checking)
-            for layer in range(2, len(self.layers) + 1):
-                activation = NeuralNetwork.logistic(self.Z(layer, self.Matrix_Theta_for_gradient_checking, self.Matrix_A_for_gradient_checking))
-                self.Matrix_A_for_gradient_checking.update({f"A_l{layer}": activation})
-                self.Matrix_A_for_gradient_checking[f"A_l{layer}"][0] = 1
-            return self.Matrix_A_for_gradient_checking[f"A_l{len(self.layers)}"]
-        else:
-            self.A1_matrix_creator(Xi, self.Matrix_A)
-            for layer in range(2, len(self.layers) + 1):
-                activation = NeuralNetwork.logistic(self.Z(layer, self.Matrix_Theta, self.Matrix_A))
-                self.Matrix_A.update(
-                    {f"A_l{layer}": activation})
-                self.Matrix_A[f"A_l{layer}"][0] = 1
-            return self.Matrix_A[f"A_l{len(self.layers)}"]
-
-    def error(self, Yi: np.array) -> np.array:
-        error = np.reshape(np.insert(Yi, 0, 1), [self.k + 1, 1]) - self.Matrix_A[f"A_l{len(self.layers)}"]
-        self.Matrix_delta.update({f"d_l{len(self.layers)}": error})
+    def delta_init(self, Yi, loss=None):
+        self.Matrix_delta.clear()
+        error = 0
+        for index in range(2, len(self.layers) + 1):
+            if index != len(self.layers):
+                self.Matrix_delta[f"d{index}"] = np.zeros([self.layers[index - 1] + 1, 1])
+            else:
+                error = self.Matrix_delta[f"d{index}"] = self.Matrix_Activation[f"A{len(self.layers)}"] - np.expand_dims(Yi, axis=-1)
+                self.error_screener(error, loss)
         return error
 
-    def J_of_theta_for_one_examples(self, Yi: np.array) -> None:
-        """
-        Calculates the j of theta for each example
-        adding it to a list so the final result would be
-        the sum of the list
-        :param Yi: Yi of the example set
-        :return: value of j for each set of examples
-        """
-        j = r = 0
-        for k in range(1, self.k + 1):
-            j += (- ((Yi[k - 1] * np.log(self.Matrix_A[f"A_l{len(self.layers)}"][k][0])) +
-                     ((1 - Yi[k - 1]) * np.log(1 - self.Matrix_A[f"A_l{len(self.layers)}"][k][0]))) / self.m)
-        for layer in self.Matrix_Theta:
-            r += np.sum(self.Matrix_Theta[layer][1:, :])
-        r = ((r ** 2) * self.lambda_) / (2 * self.m)
-        j += r
-        self.j_of_on_round_through_exps.append(j)
-
-    def back_propagation(self) -> None:
-        """
-        conduct back prop
-        :return: None
-        """
-        for layer in reversed(range(2, len(self.layers))):
-            delta = np.dot(np.transpose(self.Matrix_Theta[f"Theta_l{layer}"]), self.Matrix_delta[f"d_l{layer + 1}"])
-            a = self.Matrix_A[f"A_l{layer}"] * (1 - self.Matrix_A[f"A_l{layer}"])
-            self.Matrix_delta.update({f"d_l{layer}": delta * a})
-        for layer in self.Matrix_DELTA:
-            self.Matrix_DELTA[layer] += np.dot(self.Matrix_delta[f"d_l{str(int(layer[-1]) + 1)}"], np.transpose(self.Matrix_A[f"A_l{layer[-1]}"]))
-
-    def A_cleaner(self) -> None:
-        """
-        clears the matrix of A
-        :return: None
-        """
-        self.Matrix_A.clear()
-
-    def delta_cleaner(self) -> None:
-        """
-        clears the matrix of A
-        :return: None
-        """
-        self.Matrix_delta.clear()
-
-    def Run_one_time_through_examples(self) -> dict:
-        self.DELTA_matrix_creator(self.Matrix_DELTA)
-        for index, example in enumerate(self.X):
-            prediction = self.forward_propagation(example)
-            error = self.error(self.Y[index])
-            self.J_of_theta_for_one_examples(self.Y[index])
-            self.back_propagation()
-            self.A_cleaner()
-            self.delta_cleaner()
-        return locals()
-
-    def DELTA_cleaner(self) -> None:
-        """
-        clears the matrix of A
-        :return: None
-        """
+    def DELTA_init(self):
         self.Matrix_DELTA.clear()
+        for index in range(1, len(self.layers)):
+            self.Matrix_DELTA[f"D{index}"] = np.zeros([self.layers[index], self.layers[index - 1] + 1])
 
-    def Gradiant(self) -> None:
-        for layer in self.Matrix_DELTA:
-            for j in range(self.Matrix_DELTA[layer].shape[1]):
-                if j == 0:
-                    self.Matrix_DELTA[layer][1:, j] /= self.m
-                else:
-                    self.Matrix_DELTA[layer][1:, j] = \
-                        (self.Matrix_DELTA[layer][1:, j] +
-                         (self.lambda_ * self.Matrix_Theta[f"Theta_l{layer[-1]}"][1:, j])) / self.m
-
-    def Gradiant_checking(self, epsilon) -> dict:
-        self.DELTA_matrix_creator(self.Matrix_DELTA_for_gradient_checking)
-        for layer in self.Matrix_Theta:
-            for i in range(self.Matrix_Theta[layer].shape[0]):
-                for j in range(self.Matrix_Theta[layer].shape[1]):
-                    J_plus = 0
-                    J_minus = 0
-                    for xi, yi in zip(self.X, self.Y):
-                        h_plus = self.forward_propagation(xi, epsilon=epsilon, l=layer[-1], i=i, j=j)
-                        h_minus = self.forward_propagation(xi, epsilon=-epsilon, l=layer[-1], i=i, j=j)
-                        for k in range(self.k):
-                            J_plus += - ((yi[k] * np.log(h_plus[k + 1])) + ((1 - yi[k]) * np.log(1 - h_plus[k + 1]))) / self.m
-                        for k in range(self.k):
-                            J_minus += - ((yi[k] * np.log(h_minus[k + 1])) + ((1 - yi[k]) * np.log(1 - h_minus[k + 1]))) / self.m
-                    self.Matrix_DELTA_for_gradient_checking[f"DELTA_l{layer[-1]}"][i][j] = (J_plus - J_minus) / 2 * epsilon
-        error_of_gradiant = dict()
-        for layer in self.Matrix_DELTA_for_gradient_checking:
-            error = abs(self.Matrix_DELTA[layer] - self.Matrix_DELTA_for_gradient_checking[layer])
-            error_of_gradiant.update({layer: error})
-        return error_of_gradiant
-
-    def Gradiant_decent(self, learning_rate, use_gradiant_of_GC=False) -> None:
-        if not use_gradiant_of_GC:
-            for layer in self.Matrix_Theta:
-                self.Matrix_Theta[layer] -= learning_rate * self.Matrix_DELTA[f"DELTA_l{layer[-1]}"]
+    @staticmethod
+    def adding_bias(Matrix, trans=False):
+        if not trans:
+            Activation_with_bias = np.transpose(np.expand_dims(np.insert(Matrix, 0, 1), axis=0))
         else:
+            Activation_with_bias = np.expand_dims(np.insert(Matrix, 0, 1), axis=0)
+        return Activation_with_bias
+
+    @staticmethod
+    def logistic(z):
+        return 1 / (1 + np.exp(-z))
+
+    def forward_propagation(self, Xi):
+        self.Activation_init(Xi)
+        for index in range(2, len(self.layers) + 1):
+            self.Matrix_Activation[f"A{index}"] = self.logistic(np.dot(self.Matrix_Theta[f"T{index - 1}"],
+                                                                       self.adding_bias(self.Matrix_Activation[f"A{index - 1}"])))
+        return self.Matrix_Activation[f"A{len(self.layers)}"]
+
+    def predict(self, Xi, whole_activation_matrix=False, ones_and_zeros=(False, 0.5)):
+        theta = deepcopy(self.Matrix_Theta)
+        self.Activation_init(Xi)
+        activation = deepcopy(self.Matrix_Activation)
+        for layer in activation:
+            activation[layer] *= 0
+            if int(layer[-1]) == 1:
+                activation[layer] = Xi
+        for index in range(2, len(self.layers) + 1):
+            activation[f"A{index}"] = np.transpose(self.logistic(np.dot(theta[f"T{index - 1}"],
+                                                                        self.adding_bias(activation[f"A{index - 1}"]))))
+        if not ones_and_zeros[0]:
+            if whole_activation_matrix:
+                return activation
+            else:
+                return activation[f"A{len(self.layers)}"]
+        else:
+            if activation[f"A{len(self.layers)}"] > 0.5:
+                return 1
+            else:
+                return 0
+
+    def back_propagation(self, Yi, loss=None):
+        error = self.delta_init(Yi, loss)
+        for layer in reversed(range(2, len(self.layers))):
+            refined_a = self.adding_bias(self.Matrix_Activation[f"A{layer}"])
+            gradiant_a = refined_a * (1 - refined_a)
+            if (layer + 1) == len(self.layers):
+                delta = np.dot(np.transpose(self.Matrix_Theta[f"T{layer}"]), self.Matrix_delta[f"d{layer + 1}"])
+            else:
+                delta = np.dot(np.transpose(self.Matrix_Theta[f"T{layer}"]), self.Matrix_delta[f"d{layer + 1}"][1:])
+            self.Matrix_delta[f"d{layer}"] = delta * gradiant_a
+        for layer in range(1, len(self.layers)):
+            refined_a = self.adding_bias(self.Matrix_Activation[f"A{layer}"])
+            if layer != len(self.layers) - 1:
+                self.Matrix_DELTA[f"D{layer}"] += np.dot(self.Matrix_delta[f"d{layer + 1}"][1:], np.transpose(refined_a))
+            else:
+                self.Matrix_DELTA[f"D{layer}"] += np.dot(self.Matrix_delta[f"d{layer + 1}"], np.transpose(refined_a))
+        return error
+
+    def learn_examples(self, optimizer=None, loss=None):
+        self.DELTA_init()
+        learning_result = list()
+        for example in range(self.m):
+            Hypothesis = self.forward_propagation(self.X[example])
+            error = self.back_propagation(self.Y[example])
+            self.Matrix_Activation.clear()
+            self.Matrix_delta.clear()
+            learning_result.append((Hypothesis, error, self.Y[example]))
+        return learning_result
+
+    def gradient(self):
+        for layer in range(1, len(self.layers)):
+            self.Matrix_DELTA[f"D{layer}"] /= 1 / self.m
+
+    def gradient_decent(self, learning_rate=0.01):
+        for layer in range(1, len(self.layers)):
+            self.Matrix_Theta[f"T{layer}"] -= learning_rate * self.Matrix_DELTA[f"D{layer}"]
+
+    def JofTheta(self, learning_result_tuple, regularization=(False, 0)):
+        J = 0
+        for detail in learning_result_tuple:
+            H, Yi = detail[0], detail[2]
+            for Hk, Yik in zip(H, Yi):
+                J += (Yik * np.log(Hk)) + ((1 - Yik) * np.log(1 - Hk))
+        J /= - (1 / self.m)
+        if regularization[0]:
+            r = 0
             for layer in self.Matrix_Theta:
-                self.Matrix_Theta[layer] -= learning_rate * self.Matrix_DELTA_for_gradient_checking[f"DELTA_l{layer[-1]}"]
+                r += (regularization[1] / (2 * self.m)) * np.sum(self.Matrix_Theta[layer][:, 1:] ** 2)
+            J += r
+        return J
 
-    def J_of_theta(self) -> np.array:
-        j = np.sum(self.j_of_on_round_through_exps)
-        self.J.append(j)
-        self.j_of_on_round_through_exps.clear()
-        return j
-
-    def Train(self, learning_rate: float = 0.01, epochs=-1, gradiant_checking=False, epsilon=(10 ** -4), use_gradiant_of_GC=False):
-        self.Theta_matrix_creator()
-        while epochs != 0:
-            Details = self.Run_one_time_through_examples()
-            self.J_of_theta()
-            self.Gradiant()
-            if gradiant_checking:
-                self.Gradiant_checking(epsilon)
-            self.Gradiant_decent(learning_rate, use_gradiant_of_GC)
-            self.Matrix_DELTA_for_gradient_checking.clear()
-            self.DELTA_cleaner()
-            epochs -= 1
-            # doesn't need ,
-            print(f"____________________________________________________________________ Start of No.Epochs:     {epochs}"
-                  f" __________________________________________________________________________\n",
-                  Details, "\n", self.Matrix_Theta, "\n",
-                  f"____________________________________________________________________ End of No.Epochs:     {epochs}"
-                  f" ____________________________________________________________________________\n")
+    def Train(self, learning_rate=0.01, epochs=0, detailed=True, optimizer=None, loss=None, regularization=(False, 0)):
+        self.Theta_init()
+        counter = 1
+        while counter <= epochs:
+            Details = self.learn_examples(optimizer, loss)
+            self.J.append(self.JofTheta(Details, regularization))
+            self.gradient()
+            self.gradient_decent(learning_rate)
+            if detailed:
+                # doesn't need ,
+                print(f"____________________________________________________________________ Start of No.Epochs:     {counter}"
+                      f" __________________________________________________________________________\n",
+                      Details, "\n", self.Matrix_Theta, "\n",
+                      f"******************************************************************** End of No.Epochs:     {counter}"
+                      f" ****************************************************************************\n")
+            self.Matrix_DELTA.clear()
+            counter += 1
 
     def plot_J(self) -> None:
         x_number_values = [index for index, item in enumerate(self.J)]
@@ -270,15 +188,18 @@ class NeuralNetwork:
         plt.show()
 
 
-# my_x = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
-# my_y = np.array([2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40])
+# my_x = np.round(np.random.random([3, 1]), 2)
+# my_y = np.round(np.random.random([3, 2]), 2)
+n = 20
+my_x = np.array([i for i in range(n)])
+my_y = np.array([1 if i % 2 == 0 else 0 for i in range(n)])
 
-my_x = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
-my_y = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+ai = NeuralNetwork(my_x, my_y, epsilon=0.001)
+ai.add_layer(list_of_layers=[10 for i in range(20)])
+ai.Train(epochs=10, learning_rate=0.01, detailed=False)
 
-ai = NeuralNetwork(my_x, my_y)
-ai.add_layer(3)
-ai.Train(epochs=1000)
-print(ai.forward_propagation(np.array([12])))
+print(ai.predict(4))
+print(ai.predict(5))
+print(ai.predict(6))
+print(ai.predict(7))
 ai.plot_J()
-
