@@ -26,10 +26,10 @@ import matplotlib.pyplot as plt
         today = datetime.now()
         current_time = timedelta(hours=today.hour, minutes=today.minute, seconds=(today.second + 1), microseconds=today.microsecond)
         yesterday = today - current_time
-        _3_years_ago = yesterday - timedelta(365 * number_of_years)
+        _n_years_ago = yesterday - timedelta(365 * number_of_years)
         try:
             url = f"https://query1.finance.yahoo.com/v7/finance/download/{self.ticker}" \
-                  f"?period1={int(time.mktime(_3_years_ago.timetuple()))}&" \
+                  f"?period1={int(time.mktime(_n_years_ago.timetuple()))}&" \
                   f"period2={int(time.mktime(yesterday.timetuple()))}&" \
                   f"interval=1d&events=history&includeAdjustedClose=true"
             df = pd.read_csv(url)
@@ -42,7 +42,7 @@ import matplotlib.pyplot as plt
                                   "if no there was no problem there then"
                                   "check your internet connection or use vpn (normally not necessary)")
 
-    def candle_chart(self, mav=tuple(), volume=False) -> None:
+    def candle_chart(self, mav=None, volume=False) -> None:
         """
         plot your dataframe on a candle stick chart
         :param mav: set mav=(5, 10, ... up to 7 mavs) and see moving averages on chart
@@ -50,6 +50,8 @@ import matplotlib.pyplot as plt
         """
         plot_reqs = self.ohlc
         k = dict()
+        if mav is None:
+            mav = tuple()
         if len(mav) != 0:
             k.update({"mav": mav})
         if volume:
