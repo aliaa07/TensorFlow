@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 class SymbolData:
     """
-import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt
     This class initialization ends up with returning
     a dataframe and using self.ohlc you can get to a
     pandas dataframe ready to be plotted on a chart
@@ -52,7 +52,7 @@ import matplotlib.pyplot as plt
         k = dict()
         if mav is None:
             mav = tuple()
-        if len(mav) != 0:
+        if mav:
             k.update({"mav": mav})
         if volume:
             k.update({"volume": True})
@@ -183,4 +183,5 @@ def Pivot(dataframe: pandas.core.frame.DataFrame, Order=3, **kwargs) -> pandas.c
 
 
 eur = SymbolData("EURUSD=X", 500, 3)
-Pivot(eur.ohlc, Order=10, draw_on_chart=True)
+# Pivot(eur.ohlc, Order=10, draw_on_chart=True)
+eur.candle_chart(mav=(5, 10))
